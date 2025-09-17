@@ -11,9 +11,9 @@ Implemented:
    - [x] Decimation Bandwidth
    - [x] Continuous Acquisition Modes
    - [x] Measurement Done Interrupts
-   - [ ] Periodic SET (partial implementation)
+   - [x] Periodic SET
  - [ ] OTP
- - [ ] Bridge-offset SET/RST
- - [x] Calibration
+ - [x] Bridge-offset SET/RST
+ - [ ] Calibration
  - [x] Documentation
  - [ ] Examples

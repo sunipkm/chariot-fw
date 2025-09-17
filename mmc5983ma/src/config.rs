@@ -19,6 +19,15 @@ impl DecimationBw {
     fn apply(self, reg: &mut AnalogControl) {
         reg.set_bw(self as u8);
     }
+
+    pub(crate) fn delay_us(self) -> u32 {
+        match self {
+            DecimationBw::Hz100 => 8500,
+            DecimationBw::Hz200 => 4500,
+            DecimationBw::Hz400 => 2500,
+            DecimationBw::Hz800 => 1000,
+        }
+    }
 }
 
 /// Frequency of measurements in continuous measurement mode
@@ -46,11 +55,6 @@ pub enum ContinuousMeasurementFreq {
 impl ContinuousMeasurementFreq {
     fn apply(self, reg: &mut DigitalControl) {
         reg.set_cm_freq(self as u8);
-        if self == ContinuousMeasurementFreq::Off {
-            reg.set_cmm_en(false);
-        } else {
-            reg.set_cmm_en(true);
-        }
     }
 }
 
@@ -98,8 +102,8 @@ impl PeriodicSetInterval {
 /// Configuration for the MMC5983MA sensor
 #[derive(Debug, Clone, Copy)]
 pub struct Mmc5983Config {
-    frequency: ContinuousMeasurementFreq,
-    bandwidth: DecimationBw,
+    pub(crate) frequency: ContinuousMeasurementFreq,
+    pub(crate) bandwidth: DecimationBw,
     set_interval: PeriodicSetInterval,
     inhibit: AxisInhibit,
     irq: bool,
@@ -186,25 +190,25 @@ impl Mmc5983ConfigBuilder {
 impl Mmc5983Config {
     pub(crate) fn to_registers(
         self,
-        reg0a: &mut AnalogControl,
-        reg0b: &mut DigitalControl,
-        reg09: &mut MeasurementTriggerControl,
-    ) {
-        self.inhibit.apply(reg0a);
-        self.set_interval.apply(reg0b, reg09);
-        self.frequency.apply(reg0b);
-        self.bandwidth.apply(reg0a);
+    ) -> (AnalogControl, MeasurementTriggerControl, DigitalControl) {
+        let mut analogctrl = AnalogControl::from(0);
+        let mut digitalctrl = DigitalControl::from(0);
+        let mut meastrigctrl = MeasurementTriggerControl::from(0);
+        self.inhibit.apply(&mut analogctrl);
+        self.set_interval.apply(&mut digitalctrl, &mut meastrigctrl);
+        self.frequency.apply(&mut digitalctrl);
+        self.bandwidth.apply(&mut analogctrl);
         if self.irq {
-            reg09.set_drdy(true);
-            // This is in reg09, so it will be set later
+            meastrigctrl.set_drdy(true);
         }
         #[cfg(feature = "defmt")]
         {
             use crate::registers::Register;
-            defmt::debug!("Analog Control [0x{:02X}]: 0b{:08b}", AnalogControl::ADDRESS, reg0a.to_u8());
-            defmt::debug!("Digital Control [0x{:02X}]: 0b{:08b}", DigitalControl::ADDRESS, reg0b.to_u8());
-            defmt::debug!("Measurement Trigger Control [0x{:02X}]: 0b{:08b}", MeasurementTriggerControl::ADDRESS, reg09.to_u8());
+            defmt::debug!("Analog Control [0x{:02X}]: 0b{:08b}", AnalogControl::ADDRESS, analogctrl.to_u8());
+            defmt::debug!("Digital Control [0x{:02X}]: 0b{:08b}", DigitalControl::ADDRESS, digitalctrl.to_u8());
+            defmt::debug!("Measurement Trigger Control [0x{:02X}]: 0b{:08b}", MeasurementTriggerControl::ADDRESS, meastrigctrl.to_u8());
         }
+        (analogctrl, meastrigctrl, digitalctrl)
     }
 }
 

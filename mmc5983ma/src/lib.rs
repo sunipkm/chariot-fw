@@ -25,10 +25,11 @@ pub use crate::sync::SyncFunctions;
 /// MMC5983MA 3-axis magnetometer device
 pub struct Mmc5983<I2C, D> {
     i2c: I2C,
+    delay: D,
     address: u8,
     config: Mmc5983Config,
     ofst: Option<MagMeasurementRaw>,
-    _marker: core::marker::PhantomData<D>,
+    running: bool,
 }
 
 /// Errors that can occur when interacting with the MMC5983MA sensor.
@@ -40,6 +41,8 @@ pub enum Mmc5983Error<I2CError> {
     InvalidDevice,
     /// Measurement not ready
     NotReady,
+    /// Invalid configuration
+    InvalidConfig,
 }
 
 impl<I2CError> From<I2CError> for Mmc5983Error<I2CError> {

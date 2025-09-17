@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #[cfg(feature = "defmt")]
-use defmt::info;
+use defmt::{debug, info};
 
 use crate::{
     config::Mmc5983Config,
@@ -8,7 +8,8 @@ use crate::{
         AnalogControl, DigitalControl, MeasurementTriggerControl, ProductId, Register,
         StatusRegister, XYZOut2, MMC5983_DEVICE_ID,
     },
-    MagMeasurementRaw, Mmc5983, Mmc5983Error, TempMeasurementRaw, MAX_LOOPS,
+    ContinuousMeasurementFreq, MagMeasurementRaw, Mmc5983, Mmc5983Error, TempMeasurementRaw,
+    MAX_LOOPS,
 };
 use embedded_hal_async::{delay::DelayNs, i2c::I2c};
 
@@ -40,21 +41,22 @@ impl<I2C> AsyncRegister<I2C> for XYZOut2 where I2C: I2c {}
 #[allow(async_fn_in_trait)]
 pub trait AsyncFunctions<I2C, I2CError, D> {
     /// Resets the device using the provided delay provider.
-    /// # Arguments
-    /// * `delay` - A delay provider to use for the reset.
-    async fn reset(&mut self, delay: &mut D) -> Result<(), Mmc5983Error<I2CError>>;
+    async fn reset(&mut self) -> Result<(), Mmc5983Error<I2CError>>;
 
-    /// Calibrates the sensor using the set/reset method.
-    async fn calibrate(&mut self, delay: &mut D) -> Result<(), Mmc5983Error<I2CError>>;
+    /// Starts continuous measurement mode.
+    async fn start(&mut self) -> Result<(), Mmc5983Error<I2CError>>;
+
+    /// Stops continuous measurement mode.
+    async fn stop(&mut self) -> Result<(), Mmc5983Error<I2CError>>;
+
+    /// Removes the soft iron offset using the SET/RESET method.
+    async fn remove_offset(&mut self) -> Result<(), Mmc5983Error<I2CError>>;
 
     /// Gets a raw magnetometer measurement from the device.
     async fn get_mag(&mut self) -> Result<MagMeasurementRaw, Mmc5983Error<I2CError>>;
 
     /// Gets a raw temperature measurement from the device.
-    async fn get_temp(
-        &mut self,
-        delay: &mut D,
-    ) -> Result<TempMeasurementRaw, Mmc5983Error<I2CError>>;
+    async fn get_temp(&mut self) -> Result<TempMeasurementRaw, Mmc5983Error<I2CError>>;
 }
 
 impl<I2C, D> Mmc5983<I2C, D>
@@ -77,21 +79,22 @@ where
         i2c: I2C,
         address: u8,
         config: Mmc5983Config,
-        delay: &mut D,
+        delay: D,
     ) -> Result<Self, Mmc5983Error<I2C::Error>> {
         let mut mmc = Mmc5983 {
             i2c,
+            delay,
             address,
             config,
             ofst: None,
-            _marker: core::marker::PhantomData,
+            running: false,
         };
         // Initialize the sensor
-        mmc.init_async(delay).await?;
+        mmc.init_async().await?;
         Ok(mmc)
     }
 
-    async fn init_async(&mut self, delay: &mut D) -> Result<(), Mmc5983Error<I2C::Error>> {
+    async fn init_async(&mut self) -> Result<(), Mmc5983Error<I2C::Error>> {
         #[cfg(feature = "defmt")]
         info!("Reading device ID...");
         let dev_id = ProductId::read_register(self.address, &mut self.i2c).await?;
@@ -100,7 +103,7 @@ where
         if dev_id.to_u8() != MMC5983_DEVICE_ID {
             return Err(Mmc5983Error::InvalidDevice);
         }
-        self.reset(delay).await
+        self.reset().await
     }
 }
 
@@ -109,23 +112,20 @@ where
     I2C: I2c<Error = I2CError>,
     D: DelayNs,
 {
-    async fn reset(&mut self, delay: &mut D) -> Result<(), Mmc5983Error<I2C::Error>> {
-        let mut analogctrl = AnalogControl::read_register(self.address, &mut self.i2c).await?;
-        let mut digitalctrl = DigitalControl::read_register(self.address, &mut self.i2c).await?;
-        let mut measctrl =
-            MeasurementTriggerControl::read_register(self.address, &mut self.i2c).await?;
-        self.config
-            .to_registers(&mut analogctrl, &mut digitalctrl, &mut measctrl);
+    async fn reset(&mut self) -> Result<(), Mmc5983Error<I2C::Error>> {
+        let (mut analogctrl, measctrl, mut digitalctrl) = self.config.to_registers();
         analogctrl.set_sw_rst(true);
         analogctrl
             .write_register(self.address, &mut self.i2c)
             .await?;
-        delay.delay_ms(10).await;
+        self.delay.delay_ms(10).await;
         analogctrl.set_sw_rst(false);
         analogctrl
             .write_register(self.address, &mut self.i2c)
             .await?;
-        self.calibrate(delay).await?;
+        self.remove_offset().await?;
+        digitalctrl.set_cm_freq(0);
+        digitalctrl.set_cmm_en(false);
         digitalctrl
             .write_register(self.address, &mut self.i2c)
             .await?;
@@ -134,6 +134,12 @@ where
     }
 
     async fn get_mag(&mut self) -> Result<MagMeasurementRaw, Mmc5983Error<I2CError>> {
+        if !self.running {
+            let (_, mut measctrl, _) = self.config.to_registers();
+            measctrl.set_tm_m(true);
+            measctrl.write_register(self.address, &mut self.i2c).await?;
+            self.delay.delay_us(self.config.bandwidth.delay_us()).await;
+        }
         let mut status = StatusRegister::read_register(self.address, &mut self.i2c).await?;
         if status.magmeas_done() {
             status.set_magmeas_done(true);
@@ -154,43 +160,62 @@ where
         }
     }
 
-    async fn get_temp(
-        &mut self,
-        delay: &mut D,
-    ) -> Result<TempMeasurementRaw, Mmc5983Error<I2CError>> {
-        let mut measctrl =
-            MeasurementTriggerControl::read_register(self.address, &mut self.i2c).await?;
+    async fn get_temp(&mut self) -> Result<TempMeasurementRaw, Mmc5983Error<I2CError>> {
+        let running = self.running;
+        if running {
+            self.stop().await?;
+        }
+        let (_, mut measctrl, _) = self.config.to_registers();
         measctrl.set_tm_t(true);
         measctrl.write_register(self.address, &mut self.i2c).await?;
-        for _ in 0..MAX_LOOPS {
-            let mut status = StatusRegister::read_register(self.address, &mut self.i2c).await?;
-            if status.tmeas_done() {
-                status.set_tmeas_done(true);
-                status.write_register(self.address, &mut self.i2c).await?;
-                let mut data = [0u8; 1];
-                self.i2c
-                    .write_read(self.address, &[0x07], &mut data)
-                    .await?;
-                return Ok(TempMeasurementRaw(data[0]));
-            }
-            delay.delay_ms(1).await;
+        let temp = {
+            let mut ctr = 0;
+            let meas = loop {
+                let mut status = StatusRegister::read_register(self.address, &mut self.i2c).await?;
+                #[cfg(feature = "defmt")]
+                debug!(
+                    "{}> Status [0x{:02X}]: 0x{:08b}",
+                    ctr,
+                    StatusRegister::ADDRESS,
+                    status.to_u8()
+                );
+                if status.tmeas_done() {
+                    let mut data = [0u8; 1];
+                    self.i2c
+                        .write_read(self.address, &[0x07], &mut data)
+                        .await?;
+                    #[cfg(feature = "defmt")]
+                    debug!("Temp raw data: {=[u8]:02x}", data);
+                    status.set_tmeas_done(true);
+                    status.write_register(self.address, &mut self.i2c).await?;
+                    break Some(TempMeasurementRaw(data[0]));
+                }
+                self.delay.delay_ms(1).await;
+                ctr += 1;
+                if ctr >= MAX_LOOPS {
+                    #[cfg(feature = "defmt")]
+                    info!("Temperature measurement: timed out");
+                    break None;
+                }
+            };
+            meas
+        };
+        if running {
+            self.start().await?;
         }
-        Err(Mmc5983Error::NotReady)
+        temp.ok_or(Mmc5983Error::NotReady)
     }
 
-    async fn calibrate(&mut self, delay: &mut D) -> Result<(), Mmc5983Error<I2CError>> {
+    async fn remove_offset(&mut self) -> Result<(), Mmc5983Error<I2CError>> {
+        let running = self.running;
+        if running {
+            self.stop().await?;
+        }
         let old_calib = self.ofst.take();
-        let mut digitalctrl = DigitalControl::read_register(self.address, &mut self.i2c).await?;
-        let mut measctrl =
-            MeasurementTriggerControl::read_register(self.address, &mut self.i2c).await?;
-        let measurement_en = digitalctrl.cmm_en();
-        digitalctrl.set_cmm_en(false);
-        digitalctrl
-            .write_register(self.address, &mut self.i2c)
-            .await?;
+        let (_, mut measctrl, _) = self.config.to_registers();
         measctrl.set_m_set(true);
         measctrl.write_register(self.address, &mut self.i2c).await?;
-        delay.delay_ms(10).await;
+        self.delay.delay_ms(10).await;
         measctrl.set_tm_m(true);
         measctrl.write_register(self.address, &mut self.i2c).await?;
         let mag_set = {
@@ -203,7 +228,7 @@ where
                     status.write_register(self.address, &mut self.i2c).await?;
                     break Some(mag_set);
                 }
-                delay.delay_ms(1).await;
+                self.delay.delay_ms(1).await;
                 ctr += 1;
                 if ctr >= MAX_LOOPS {
                     break None;
@@ -213,7 +238,7 @@ where
         measctrl.set_m_set(false);
         measctrl.set_m_reset(true);
         measctrl.write_register(self.address, &mut self.i2c).await?;
-        delay.delay_ms(10).await;
+        self.delay.delay_ms(10).await;
         let mag_reset = {
             let mut ctr = 0;
             loop {
@@ -224,7 +249,7 @@ where
                     status.write_register(self.address, &mut self.i2c).await?;
                     break Some(mag_reset);
                 }
-                delay.delay_ms(1).await;
+                self.delay.delay_ms(1).await;
                 ctr += 1;
                 if ctr >= MAX_LOOPS {
                     break None;
@@ -233,7 +258,7 @@ where
         };
         measctrl.set_m_reset(false);
         measctrl.write_register(self.address, &mut self.i2c).await?;
-        delay.delay_ms(10).await;
+        self.delay.delay_ms(10).await;
         if let (Some(mag_set), Some(mag_reset)) = (mag_set, mag_reset) {
             self.update_offsets(mag_set, mag_reset);
         } else {
@@ -241,7 +266,48 @@ where
             info!("Set/Reset measurements: timed out");
             self.ofst = old_calib;
         }
-        digitalctrl.set_cmm_en(measurement_en);
+        if running {
+            self.start().await?;
+        }
         Ok(())
+    }
+
+    async fn start(&mut self) -> Result<(), Mmc5983Error<I2CError>> {
+        if self.running {
+            return Ok(());
+        }
+        if self.config.frequency != ContinuousMeasurementFreq::Off {
+            let (_, _, mut digitalctrl) = self.config.to_registers();
+            digitalctrl.set_cmm_en(true);
+            digitalctrl
+                .write_register(self.address, &mut self.i2c)
+                .await?;
+            self.running = true;
+            Ok(())
+        } else {
+            Err(Mmc5983Error::InvalidConfig)
+        }
+    }
+
+    async fn stop(&mut self) -> Result<(), Mmc5983Error<I2CError>> {
+        if !self.running {
+            return Ok(());
+        }
+        if self.config.frequency != ContinuousMeasurementFreq::Off {
+            let (_, _, mut digitalctrl) = self.config.to_registers();
+            digitalctrl.set_cmm_en(true);
+            digitalctrl
+                .write_register(self.address, &mut self.i2c)
+                .await?;
+            digitalctrl.set_cmm_en(false);
+            digitalctrl.set_cm_freq(0);
+            digitalctrl
+                .write_register(self.address, &mut self.i2c)
+                .await?;
+            self.running = false;
+            Ok(())
+        } else {
+            Err(Mmc5983Error::InvalidConfig)
+        }
     }
 }

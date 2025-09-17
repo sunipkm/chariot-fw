@@ -63,24 +63,30 @@ async fn main(spawner: Spawner) {
     static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2c<I2C0, I2cAsync>>> = StaticCell::new();
     let i2c_bus = I2C_BUS.init(i2c);
     let mmc_i2c = I2cDevice::new(i2c_bus);
-    let mut delay = embassy_time::Delay;
     info!("Initializing MMC5983MA...");
     let mut mmc = Mmc5983::new_async(
         mmc_i2c,
         DEFAULT_I2C_ADDRESS,
         Mmc5983ConfigBuilder::default()
             .frequency(ContinuousMeasurementFreq::Hz1)
-            .set_interval(mmc5983ma::PeriodicSetInterval::Off)
+            .set_interval(mmc5983ma::PeriodicSetInterval::Per100)
             .build(),
-        &mut delay,
+        embassy_time::Delay,
     )
     .await
     .unwrap();
     info!("MMC5983MA initialized");
-    // let temp = mmc.get_temp(&mut delay).await.unwrap();
-    // info!("Temperature: {}°C", temp.celcius());
+    info!("MMC5983MA started in continuous measurement mode");
+    let temp = mmc.get_temp().await.unwrap();
+    info!("Temperature: {}°C", temp.celcius());
+    let mag = mmc.get_mag().await.unwrap().milligauss();
+    info!("Magnetometer reading: x={} y={} z={}", mag.x, mag.y, mag.z);
     // Take a measurement to ensure the sensor is working
     let mut mmcirq = Input::new(resources.mmcirq.irq, embassy_rp::gpio::Pull::None);
+    let mut ctr = 0;
+    info!("Starting MMC5983MA interrupt-driven measurements...");
+    mmc.start().await.unwrap();
+    info!("Waiting for interrupts from MMC5983MA...");
     loop {
         mmcirq.wait_for_any_edge().await;
         let mag = mmc.get_mag().await.unwrap().milligauss();
@@ -92,6 +98,13 @@ async fn main(spawner: Spawner) {
             "Field magnitude: {}, Field angles: θ={}° φ={}°",
             field_mag, theta, phi
         );
+        ctr += 1;
+        if ctr >= 5 {
+            let temp = mmc.get_temp().await.unwrap().celcius();
+            info!("Temperature: {}°C", temp);
+            mmc.stop().await.unwrap();
+            info!("MMC5983MA stopped");
+        }
     }
 
     // add some delay to give an attached debug probe time to parse the

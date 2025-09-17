@@ -62,7 +62,7 @@ mcp25xx = { version = "0.3", features = ["mcp25625"] }
 bmi323 = "0.1.0"
 assign-resources = { git = "https://github.com/adamgreig/assign-resources", rev = "bd22cb7a92031fb16f74a5da42469d466c33383e" }
 
-mmc5983ma = { path = "../mmc5983ma", features = ["float", "defmt"] }
+mmc5983ma = { path = "../mmc5983ma", features = ["float"] }
 libm = { version = "0.2", default-features = false }
 
 [features]
