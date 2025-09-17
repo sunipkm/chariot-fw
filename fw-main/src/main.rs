@@ -64,7 +64,7 @@ async fn main(spawner: Spawner) {
     let i2c_bus = I2C_BUS.init(i2c);
     let mmc_i2c = I2cDevice::new(i2c_bus);
     info!("Initializing MMC5983MA...");
-    let mut mmc = Mmc5983::new_async(
+    let mut mmc = Mmc5983::new_with_i2c(
         mmc_i2c,
         DEFAULT_I2C_ADDRESS,
         Mmc5983ConfigBuilder::default()
@@ -72,9 +72,8 @@ async fn main(spawner: Spawner) {
             .set_interval(mmc5983ma::PeriodicSetInterval::Per100)
             .build(),
         embassy_time::Delay,
-    )
-    .await
-    .unwrap();
+    );
+    mmc.init().await.unwrap();
     info!("MMC5983MA initialized");
     info!("MMC5983MA started in continuous measurement mode");
     let temp = mmc.get_temp().await.unwrap();
