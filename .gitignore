@@ -1,0 +1,4 @@
+**/target
+**/*.nc
+**/__pycache__
+**/.DS_Store

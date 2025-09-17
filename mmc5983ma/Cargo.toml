@@ -1,0 +1,23 @@
+[package]
+name = "mmc5983ma"
+version = "0.0.0"
+edition = "2021"
+description = "Sync and Async drivers for the MMC5983MA 3-axis magnetometer"
+authors = ["Sunip K. Mukherjee <sunipkmukherjee@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ["embedded-hal-async", "async", "no_std", "mmc5983", "magnetometer"]
+
+[features]
+default = ["float", "async", "sync"]
+defmt = ["dep:defmt", "dep:libm"]
+float = []
+async = ["dep:embedded-hal-async"]
+sync = ["dep:embedded-hal"]
+
+[dependencies]
+bitfield-struct = "0.11"
+defmt = { version = "1.0", "optional" = true }
+embedded-hal-async = {version = "1.0", optional = true}
+embedded-hal = {version = "1.0", optional = true}
+libm = { version = "0.2", default-features = false, optional = true }

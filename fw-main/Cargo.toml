@@ -1,0 +1,80 @@
+[package]
+name = "chariot-fw"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+embassy-embedded-hal = { version = "0.5", features = ["defmt"] }
+embassy-sync = { version = "0.7", features = ["defmt"] }
+embassy-executor = { version = "0.9", features = [
+    "arch-cortex-m",
+    "executor-thread",
+    "executor-interrupt",
+    "defmt",
+] }
+embassy-net = { version = "0.7.1", features = ["icmp", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns", "proto-ipv4", "proto-ipv6", "multicast"] }
+embassy-net-wiznet = { version = "0.2", features = [] }
+embassy-time = { version = "0.5", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+] }
+embassy-rp = { version = "0.8", features = [
+    "defmt",
+    "unstable-pac",
+    "time-driver",
+    "critical-section-impl",
+    "rp235xb",
+] }
+embassy-usb = { version = "0.5", features = ["defmt"] }
+embassy-futures = { version = "0.1" }
+embassy-usb-logger = { version = "0.5" }
+cyw43 = { version = "0.5.0" }
+cyw43-pio = { version = "0.8.0" }
+
+defmt = "1.0"
+defmt-rtt = "1.0"
+fixed = "1.23"
+fixed-macro = "1.2"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+bincode = { version = "2.0", default-features = false, features = [
+    "bincode_derive",
+    "derive",
+] }
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt = "0.7.0"
+critical-section = "1.1"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+byte-slice-cast = { version = "1.2.0", default-features = false }
+heapless = "0.9"
+usbd-hid = "0.8.1"
+rand_core = "0.9"
+embedded-hal-1 = { package = "embedded-hal", version = "1.0" }
+embedded-hal-async = "1.0"
+embedded-hal-bus = { version = "0.3", features = ["async"] }
+embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
+embedded-storage = { version = "0.3" }
+static_cell = "2.1.1"
+portable-atomic = { version = "1.11", features = ["critical-section"] }
+log = "0.4"
+rand = { version = "0.9", default-features = false }
+embedded-sdmmc = "0.9"
+mcp25xx = { version = "0.3", features = ["mcp25625"] }
+bmi323 = "0.1.0"
+assign-resources = { git = "https://github.com/adamgreig/assign-resources", rev = "bd22cb7a92031fb16f74a5da42469d466c33383e" }
+
+mmc5983ma = { path = "../mmc5983ma", features = ["float", "defmt"] }
+libm = { version = "0.2", default-features = false }
+
+[features]
+defmt = []
+default = ["defmt"]
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = 'z'
+
+[profile.dev]
+debug = 2
+lto = true
+opt-level = "z"

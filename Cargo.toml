@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "fw-main",
+    "mmc5983ma",
+]
+
+
+[profile.release]
+debug = 0
+lto = true
+opt-level = 'z'
+
+[profile.dev]
+debug = 2
+lto = true
+opt-level = "z"
