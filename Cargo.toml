@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "fw-main",
     "mmc5983ma",
+    "bmi323-rs",
 ]
 
 

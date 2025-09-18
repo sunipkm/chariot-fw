@@ -5,9 +5,12 @@ This is a Rust driver for the Bosch BMI323 Inertial Measurement Unit (IMU). The 
 ## Features
 
 - Support for both I2C and SPI interfaces
+- Support for both synchronous and asynchronous interfaces
 - Configurable accelerometer and gyroscope settings
+- Configurable interrupt settings
 - Reading raw and scaled sensor data
 - Error handling and device initialization
+- Calibration of gyroscope
 
 ## Usage
 
@@ -15,13 +18,13 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-bmi323 = "0.1.0"  # Replace with the actual version
+bmi323 = "0.0.1"  # Replace with the actual version
 ```
 
 Here's a basic example of how to use the driver:
 
 ```rust
-use bmi323::{Bmi323, AccelConfig, GyroConfig, OutputDataRate, AccelerometerRange, GyroscopeRange};
+use bmi323::{Bmi323, Bmi323, Bmi323Config, AccelMode, AccelRange, GyroMode, GyroRange, SyncFunctions};
 use embedded_hal::blocking::i2c::I2c;
 
 fn main() {
@@ -30,33 +33,38 @@ fn main() {
     let delay = // ... initialize your delay provider
 
     // Create a new BMI323 instance
-    let mut imu = Bmi323::new_with_i2c(i2c, 0x68, delay);
+    let mut imu = Bmi323::new_with_i2c(
+        i2c,
+        bmi323::DEFAULT_I2C_ADDRESS,
+        Bmi323Config::default()
+            .with_accel_mode(AccelMode::HighPerformance) // Turn on the accelerometer in high performance mode
+            .with_gyro_mode(GyroMode::HighPerformance) // Turn on the gyroscope in high performance mode
+            .with_gyro_range(GyroRange::Dps250) // Set the gyroscope measurement range
+            // .with_acc_irq(IrqMap::Int1) // Set accelerometer to signal data ready on INT1
+        delay,
+    );
 
     // Initialize the device
     imu.init().unwrap();
 
-    // Configure accelerometer
-    let accel_config = AccelConfig::builder()
-        .odr(OutputDataRate::Odr100hz)
-        .range(AccelerometerRange::G8)
-        .build();
-    imu.set_accel_config(accel_config).unwrap();
-
-    // Configure gyroscope
-    let gyro_config = GyroConfig::builder()
-        .odr(OutputDataRate::Odr100hz)
-        .range(GyroscopeRange::DPS2000)
-        .build();
-    imu.set_gyro_config(gyro_config).unwrap();
-
     loop {
-        // Read accelerometer data
-        let accel_data = imu.read_accel_data_scaled().unwrap();
-        println!("Acceleration: x={}, y={}, z={}", accel_data.x, accel_data.y, accel_data.z);
-
-        // Read gyroscope data
-        let gyro_data = imu.read_gyro_data_scaled().unwrap();
-        println!("Angular velocity: x={}, y={}, z={}", gyro_data.x, gyro_data.y, gyro_data.z);
+        // Poll for interrupt if enabled
+        if let Ok(data) = imu.read_data().await {
+            if let Some(accel) = data.accel {
+                let (ax, ay, az) = accel.float();
+                info!(
+                    "Accel: x={}g y={}g z={}g", ax, ay, az
+                );
+            }
+            if let Some(gyro) = data.gyro {
+                let (gx, gy, gz) = gyro.float();
+                info!("Gyro: x={}dps y={}dps z={}dps", gx, gy, gz);
+            }
+            if let Some(temp) = data.temp {
+                info!("Temperature: {}°C", temp.celcius());
+            }
+            info!("Time since last sample: {}ms", elapsed.as_millis());
+        }
     }
 
 }

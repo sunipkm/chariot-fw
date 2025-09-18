@@ -6,7 +6,7 @@ description = "Sync and Async drivers for the MMC5983MA 3-axis magnetometer"
 authors = ["Sunip K. Mukherjee <sunipkmukherjee@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-keywords = ["embedded-hal-async", "async", "no_std", "mmc5983", "magnetometer"]
+keywords = ["embedded-hal-async", "async", "embedded-hal", "blocking", "no_std", "mmc5983", "magnetometer"]
 
 [features]
 default = ["float", "async", "sync"]

@@ -152,12 +152,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "bmi323"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13d9428cbc8d4673e77310d83d2acfa3c09894a67b2c464289af91015a124dad"
+name = "bmi323-rs"
+version = "0.0.1"
 dependencies = [
+ "bitfield-struct",
+ "defmt 1.0.1",
  "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "libm",
 ]
 
 [[package]]
@@ -190,7 +192,7 @@ version = "0.0.1"
 dependencies = [
  "assign-resources",
  "bincode",
- "bmi323",
+ "bmi323-rs",
  "byte-slice-cast",
  "cortex-m",
  "cortex-m-rt",

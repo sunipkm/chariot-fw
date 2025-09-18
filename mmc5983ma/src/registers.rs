@@ -4,6 +4,31 @@ use defmt::info;
 
 use crate::{MagMeasurementRaw, Mmc5983};
 
+
+pub(crate) trait Register {
+    const ADDRESS: u8;
+    fn from_u8(value: u8) -> Self
+    where
+        Self: Sized;
+    fn to_u8(&self) -> u8;
+}
+
+macro_rules! impl_register {
+    ($reg:ident, $addr:expr) => {
+        impl Register for $reg {
+            const ADDRESS: u8 = $addr;
+            #[inline(always)]
+            fn from_u8(value: u8) -> Self {
+                Self::from(value)
+            }
+            #[inline(always)]
+            fn to_u8(&self) -> u8 {
+                self.0
+            }
+        }
+    };
+}
+
 pub(crate) const MMC5983_DEVICE_ID: u8 = 0x30;
 
 #[bitfield(u8)]
@@ -18,20 +43,7 @@ pub(crate) struct XYZOut2 {
     pub xout: u8,
 }
 
-impl Register for XYZOut2 {
-    const ADDRESS: u8 = 0x06;
-    #[inline(always)]
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized,
-    {
-        Self(value)
-    }
-    #[inline(always)]
-    fn to_u8(&self) -> u8 {
-        self.0
-    }
-}
+impl_register!(XYZOut2, 0x06);
 
 #[bitfield(u8)]
 pub(crate) struct StatusRegister {
@@ -50,20 +62,7 @@ pub(crate) struct StatusRegister {
     _rsvd2: u8,
 }
 
-impl Register for StatusRegister {
-    const ADDRESS: u8 = 0x08;
-    #[inline(always)]
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized,
-    {
-        Self(value)
-    }
-    #[inline(always)]
-    fn to_u8(&self) -> u8 {
-        self.0
-    }
-}
+impl_register!(StatusRegister, 0x08);
 
 #[bitfield(u8)]
 pub(crate) struct MeasurementTriggerControl {
@@ -100,20 +99,7 @@ pub(crate) struct MeasurementTriggerControl {
     _rsvd: bool,
 }
 
-impl Register for MeasurementTriggerControl {
-    const ADDRESS: u8 = 0x09;
-    #[inline(always)]
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized,
-    {
-        Self(value)
-    }
-    #[inline(always)]
-    fn to_u8(&self) -> u8 {
-        self.0
-    }
-}
+impl_register!(MeasurementTriggerControl, 0x09);
 
 #[bitfield(u8)]
 pub(crate) struct AnalogControl {
@@ -139,20 +125,7 @@ pub(crate) struct AnalogControl {
     pub sw_rst: bool,
 }
 
-impl Register for AnalogControl {
-    const ADDRESS: u8 = 0x0A;
-    #[inline(always)]
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized,
-    {
-        Self(value)
-    }
-    #[inline(always)]
-    fn to_u8(&self) -> u8 {
-        self.0
-    }
-}
+impl_register!(AnalogControl, 0x0A);
 
 #[bitfield(u8)]
 pub(crate) struct DigitalControl {
@@ -195,20 +168,7 @@ pub(crate) struct DigitalControl {
     pub en_prd_set: bool,
 }
 
-impl Register for DigitalControl {
-    const ADDRESS: u8 = 0x0B;
-    #[inline(always)]
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized,
-    {
-        Self(value)
-    }
-    #[inline(always)]
-    fn to_u8(&self) -> u8 {
-        self.0
-    }
-}
+impl_register!(DigitalControl, 0x0B);
 
 #[bitfield(u8)]
 pub(crate) struct IoControl {
@@ -231,46 +191,18 @@ pub(crate) struct IoControl {
     _rsvd2: bool,
 }
 
+impl_register!(IoControl, 0x0C);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductId(u8);
 
-impl Register for ProductId {
-    const ADDRESS: u8 = 0x2F;
-    #[inline(always)]
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized,
-    {
+impl From<u8> for ProductId {
+    fn from(value: u8) -> Self {
         Self(value)
-    }
-    #[inline(always)]
-    fn to_u8(&self) -> u8 {
-        self.0
     }
 }
 
-impl Register for IoControl {
-    const ADDRESS: u8 = 0x0C;
-    #[inline(always)]
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized,
-    {
-        Self(value)
-    }
-    #[inline(always)]
-    fn to_u8(&self) -> u8 {
-        self.0
-    }
-}
-
-pub(crate) trait Register {
-    const ADDRESS: u8;
-    fn from_u8(value: u8) -> Self
-    where
-        Self: Sized;
-    fn to_u8(&self) -> u8;
-}
+impl_register!(ProductId, 0x2F);
 
 impl From<[u8; 7]> for MagMeasurementRaw {
     fn from(value: [u8; 7]) -> Self {
