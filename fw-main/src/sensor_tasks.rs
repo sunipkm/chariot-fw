@@ -58,7 +58,7 @@ pub async fn magnetometer_task(
                 sender
                     .send(SingleMeasurement {
                         measurement,
-                        timestamp: tref.elapsed().as_secs() as u32,
+                        timestamp: tref.elapsed().as_millis() as u32,
                     })
                     .await;
             }
@@ -129,7 +129,7 @@ pub async fn imu_task(i2c: SharedI2cBus, irq: ImuIrq, sender: MeasurementSender,
                         sender
                             .send(SingleMeasurement {
                                 measurement,
-                                timestamp: tref.elapsed().as_secs() as u32,
+                                timestamp: tref.elapsed().as_millis() as u32,
                             })
                             .await;
                     }
@@ -138,7 +138,7 @@ pub async fn imu_task(i2c: SharedI2cBus, irq: ImuIrq, sender: MeasurementSender,
                         sender
                             .send(SingleMeasurement {
                                 measurement,
-                                timestamp: tref.elapsed().as_secs() as u32,
+                                timestamp: tref.elapsed().as_millis() as u32,
                             })
                             .await;
                     }
@@ -190,7 +190,7 @@ pub async fn baro_task(i2c: SharedI2cBus, irq: BaroIrq, sender: MeasurementSende
                         sender
                             .send(SingleMeasurement {
                                 measurement,
-                                timestamp: tref.elapsed().as_secs() as u32,
+                                timestamp: tref.elapsed().as_millis() as u32,
                             })
                             .await;
                     }
