@@ -56,7 +56,7 @@ impl DeviceId {
 }
 
 #[bitfield(u8)]
-#[derive(Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 /// Sensor Error Register, address 0x02
 pub(crate) struct ErrorReg {
     #[bits(1, access=RO)]
@@ -76,7 +76,7 @@ pub(crate) struct ErrorReg {
 impl_register!(ErrorReg, 0x02);
 
 #[bitfield(u8)]
-#[derive(Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 /// Sensor Status Register, address 0x03
 pub(crate) struct StatusReg {
     #[bits(4, default = 0)]
@@ -106,7 +106,7 @@ pub(crate) const TEMP_DATA_ADDR: u8 = 0x07;
 pub(crate) const TIME_DATA_ADDR: u8 = 0x0C;
 
 #[bitfield(u8)]
-#[derive(Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 /// Event register, address 0x10
 pub(crate) struct EventReg {
     #[bits(1, access=RO)]
@@ -124,7 +124,7 @@ impl_register!(EventReg, 0x10);
 /// Interrupt status, address 0x11
 /// This register is clear-on-read.
 #[bitfield(u8)]
-#[derive(Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub(crate) struct IrqStatus {
     #[bits(1, access=RO)]
     pub fifo_watermark: bool,
@@ -143,7 +143,7 @@ impl_register!(IrqStatus, 0x11);
 
 /// Interrupt control register, address 0x19
 #[bitfield(u8)]
-#[derive(Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub(crate) struct IrqControl {
     #[bits(1, access=RW, default = false)]
     pub open_drain: bool,
@@ -167,7 +167,7 @@ impl_register!(IrqControl, 0x19);
 
 /// Power control, addres 0x1b
 #[bitfield(u8)]
-#[derive(Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub(crate) struct PowerCtrl {
     #[bits(1, access=RW, default = false)]
     /// Enable or disable the pressure sensor
@@ -188,7 +188,8 @@ impl_register!(PowerCtrl, 0x1B);
 
 /// Sensor mode
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default, Format)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub enum SensorMode {
     /// Sleep mode
     Sleep = 0x0,
@@ -215,7 +216,8 @@ impl SensorMode {
 
 /// Oversampling settings
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default, Format)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub enum Oversampling {
     /// Skipped (output set to 0x80000 for pressure, 0x8000 for temperature)
     #[default]
@@ -250,7 +252,7 @@ impl Oversampling {
 }
 
 #[bitfield(u8)]
-#[derive(Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 /// Oversampling settings register, address 0x1C
 pub struct OversamplingReg {
     #[bits(3, access=RW, from = Oversampling::from_u8, default = Oversampling::X16)]
@@ -266,7 +268,8 @@ pub struct OversamplingReg {
 impl_register!(OversamplingReg, 0x1C);
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default, Format)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 /// Output data rate settings
 pub enum OutputDataRate {
     /// 200 Hz, 5 ms
@@ -371,7 +374,8 @@ impl Register for OutputDataRate {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default, Format)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 /// IIR filter coefficients
 pub enum IIRFilterConfig {
     /// Bypass (filter disabled)

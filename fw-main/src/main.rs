@@ -4,30 +4,30 @@
 #![no_main]
 
 use assign_resources::assign_resources;
-use bmi323_rs::{AsyncFunctions as _, Bmi323, Bmi323Config, GyroRange};
-use bmp390_rs::{degree_celsius, foot, hectopascal, meter, AsyncFunctions as _, Bmp390, Bmp390Config, Length};
 use defmt::*;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
 use embassy_rp::{
     Peri, bind_interrupts,
     flash::{Async as FlashAsync, Flash},
-    gpio::Input,
     i2c::{Async as I2cAsync, Config as I2cConfig, I2c, InterruptHandler as I2cInterruptHandler},
     peripherals::{self, I2C0},
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
+use embassy_time::Duration;
 #[allow(unused_imports)]
 use embassy_time::{Instant, Timer};
-use mmc5983ma::{
-    AsyncFunctions as _, ContinuousMeasurementFreq, DEFAULT_I2C_ADDRESS, Mmc5983,
-    Mmc5983ConfigBuilder,
-};
 use static_cell::StaticCell;
 
 use {defmt_rtt as _, panic_probe as _};
 
+mod measurement;
+mod sensor_tasks;
+/// Ideally, we can write 
+/// TODO: Check this value
+pub const CADENCE: Duration = Duration::from_secs(2); // seconds
 bind_interrupts!(struct Irqs {
     I2C0_IRQ => I2cInterruptHandler<I2C0>;
 });
@@ -55,7 +55,11 @@ assign_resources! {
 }
 
 mod buffered_flash;
-use crate::buffered_flash::BufferedFlash;
+use crate::{
+    buffered_flash::BufferedFlash,
+    measurement::{MeasurementChannel, MeasurementReceiver, SINGLE_MEASUREMENT_SIZE},
+    sensor_tasks::{baro_task, imu_task, magnetometer_task},
+};
 
 #[allow(unused)]
 const FLASH_SIZE: usize = 2 * 1024 * 1024;
@@ -65,6 +69,22 @@ async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
     let resources = split_resources!(p);
 
+    /// Set up a channel for sending measurements from sensor tasks to the storage task
+    static DATA_CHANNEL: StaticCell<MeasurementChannel> = StaticCell::new();
+    let channel = DATA_CHANNEL.init(Channel::new());
+
+    info!("Chariot FW starting up...");
+    // Set up flash memory
+    // add some delay to give an attached debug probe time to parse the
+    // defmt RTT header. Reading that header might touch flash memory, which
+    // interferes with flash write operations.
+    // https://github.com/knurling-rs/defmt/pull/683
+    Timer::after_millis(10).await;
+
+    spawner
+        .spawn(core0_storage(resources.flashmem, channel.receiver()))
+        .unwrap();
+
     let i2c_config = I2cConfig::default();
     let i2c = Mutex::new(I2c::new_async(
         p.I2C0,
@@ -73,43 +93,62 @@ async fn main(spawner: Spawner) {
         Irqs,
         i2c_config,
     ));
+
+    /// Create I2C devices for each sensor
     static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2c<I2C0, I2cAsync>>> = StaticCell::new();
     let i2c_bus = I2C_BUS.init(i2c);
     let mmc_i2c = I2cDevice::new(i2c_bus);
     let imu_i2c = I2cDevice::new(i2c_bus);
     let baro_i2c = I2cDevice::new(i2c_bus);
 
+    let reftime = Instant::now();
+
     // Spawn tasks to handle each sensor
     spawner
-        .spawn(magnetometer_task(mmc_i2c, resources.mmcirq))
+        .spawn(magnetometer_task(
+            mmc_i2c,
+            resources.mmcirq,
+            channel.sender(),
+            reftime,
+        ))
         .unwrap();
-    spawner.spawn(imu_task(imu_i2c, resources.imuirq)).unwrap();
     spawner
-        .spawn(baro_task(baro_i2c, resources.baroirq))
+        .spawn(imu_task(
+            imu_i2c,
+            resources.imuirq,
+            channel.sender(),
+            reftime,
+        ))
         .unwrap();
-
-    // add some delay to give an attached debug probe time to parse the
-    // defmt RTT header. Reading that header might touch flash memory, which
-    // interferes with flash write operations.
-    // https://github.com/knurling-rs/defmt/pull/683
-    // Timer::after_millis(10).await;
-
-    // spawner.spawn(core0_storage(resources.flashmem)).unwrap();
+    spawner
+        .spawn(baro_task(
+            baro_i2c,
+            resources.baroirq,
+            channel.sender(),
+            reftime,
+        ))
+        .unwrap();
 }
 
 #[embassy_executor::task]
-async fn core0_storage(flash: FlashMem) {
+async fn core0_storage(flash: FlashMem, receiver: MeasurementReceiver) {
     let flash = Flash::<_, FlashAsync, FLASH_SIZE>::new(flash.flash, flash.dma);
     match BufferedFlash::new(flash) {
         Ok(mut state) => {
             info!(
-                "Initialized BufferedFlash. Current offset: 0x{:x}",
-                state.current_offset()
+                "Initialized BufferedFlash. Current offset: 0x{:x}, capacity: {} bytes, messages: {}",
+                state.current_offset(),
+                state.remaining(),
+                state.remaining() / SINGLE_MEASUREMENT_SIZE
             );
+            let mut remaining_messages = state.remaining() / SINGLE_MEASUREMENT_SIZE;
+            let mut remaining_bytes = state.remaining();
+            let mut stored_messages = 0;
+            const PAT: [u8; 8] = *b"CHARIOT\n";
             loop {
-                match state.insert(b"   Hello world!\n") {
+                match state.insert(PAT) {
                     Ok(Some(ofst)) => {
-                        info!("Wrote to flash at offset 0x{:x}", ofst);
+                        trace!("Wrote pattern to flash at offset 0x{:x}", ofst);
                         break;
                     }
                     Ok(None) => {}
@@ -119,145 +158,30 @@ async fn core0_storage(flash: FlashMem) {
                     }
                 }
             }
+            loop {
+                let measurement = receiver.receive().await;
+                match state.insert(measurement.into_bytes()) {
+                    Ok(maybeofst) => {
+                        if let Some(ofst) = maybeofst {
+                            trace!("Wrote measurement to flash at offset 0x{:x}", ofst);
+                            remaining_bytes = state.remaining();
+                        }
+                        stored_messages += 1;
+                        remaining_messages -= 1;
+                        info!(
+                            "Stored measurement {}, {} messages ({} bytes) remaining",
+                            stored_messages, remaining_messages, remaining_bytes
+                        );
+                    }
+                    Err(e) => {
+                        error!("Error inserting measurement into buffer: {}", e);
+                        break;
+                    }
+                }
+            }
         }
         Err(e) => {
             log::error!("Could not initialize BufferedFlash: {e:?}");
-        }
-    }
-}
-
-#[embassy_executor::task]
-async fn magnetometer_task(i2c: SharedI2cBus, irq: MmcIrq) {
-    info!("Initializing MMC5983MA...");
-    let mut mmc = Mmc5983::new_with_i2c(
-        i2c,
-        DEFAULT_I2C_ADDRESS,
-        Mmc5983ConfigBuilder::default()
-            .frequency(ContinuousMeasurementFreq::Hz1)
-            .set_interval(mmc5983ma::PeriodicSetInterval::Per100)
-            .build(),
-        embassy_time::Delay,
-    );
-    mmc.init().await.unwrap();
-    info!("MMC5983MA initialized");
-    info!("MMC5983MA started in continuous measurement mode");
-    let temp = mmc.get_temp().await.unwrap();
-    info!("Temperature: {}°C", temp.celcius());
-    let mag = mmc.get_mag().await.unwrap().milligauss();
-    info!("Magnetometer reading: x={} y={} z={}", mag.x, mag.y, mag.z);
-    // Take a measurement to ensure the sensor is working
-    let mut mmcirq = Input::new(irq.irq, embassy_rp::gpio::Pull::None);
-    let mut ctr = 0;
-    info!("Starting MMC5983MA interrupt-driven measurements...");
-    mmc.start().await.unwrap();
-    info!("Waiting for interrupts from MMC5983MA...");
-    loop {
-        mmcirq.wait_for_any_edge().await;
-        let mag = mmc.get_mag().await.unwrap().milligauss();
-        info!("Magnetometer reading: x={} y={} z={}", mag.x, mag.y, mag.z);
-        let field_mag = libm::sqrtf(mag.x * mag.x + mag.y * mag.y + mag.z * mag.z);
-        let theta = libm::atanf(mag.z / field_mag) * 180.0 / core::f32::consts::PI;
-        let phi = libm::atan2f(mag.y, mag.x) * 180.0 / core::f32::consts::PI;
-        info!(
-            "Field magnitude: {}, Field angles: θ={}° φ={}°",
-            field_mag, theta, phi
-        );
-        ctr += 1;
-        if ctr >= 5 {
-            let temp = mmc.get_temp().await.unwrap().celcius();
-            info!("Temperature: {}°C", temp);
-            mmc.stop().await.unwrap();
-            info!("MMC5983MA stopped");
-        }
-    }
-}
-
-#[embassy_executor::task]
-async fn imu_task(i2c: SharedI2cBus, irq: ImuIrq) {
-    let mut imu = Bmi323::new_with_i2c(
-        i2c,
-        bmi323_rs::DEFAULT_I2C_ADDRESS,
-        Bmi323Config::default()
-            .with_accel_mode(bmi323_rs::AccelMode::HighPerformance)
-            .with_gyro_mode(bmi323_rs::GyroMode::HighPerformance)
-            .with_gyro_range(GyroRange::Dps250)
-            .with_accel_odr(bmi323_rs::OutputDataRate::Hz25)
-            .with_gyro_odr(bmi323_rs::OutputDataRate::Hz25)
-            .with_acc_irq(bmi323_rs::IrqMap::Int2)
-            .with_gyro_irq(bmi323_rs::IrqMap::Int2)
-            .with_temp_irq(bmi323_rs::IrqMap::Int2),
-        embassy_time::Delay,
-    );
-    imu.init().await.unwrap();
-    info!("bmi323_rs initialized");
-    imu.calibrate(bmi323_rs::SelfCalibrateType::Both)
-        .await
-        .unwrap();
-    // info!("bmi323_rs calibrated");
-    let mut imuirq = Input::new(irq.irq, embassy_rp::gpio::Pull::None);
-    imu.start().await.unwrap();
-    info!("bmi323_rs started in continuous measurement mode");
-    let mut now = Instant::now();
-    loop {
-        imuirq.wait_for_falling_edge().await;
-        let elapsed = now.elapsed();
-        now = Instant::now();
-        // Handle interrupt
-        if let Ok(data) = imu.read_data().await {
-            if let Some(accel) = data.accel {
-                let (ax, ay, az) = accel.float();
-                info!("Accel: x={}g y={}g z={}g", ax, ay, az);
-            }
-            if let Some(gyro) = data.gyro {
-                let (gx, gy, gz) = gyro.float();
-                info!("Gyro: x={}dps y={}dps z={}dps", gx, gy, gz);
-            }
-            if let Some(temp) = data.temp {
-                info!("Temperature: {}°C", temp.celcius());
-            }
-            info!("Time since last sample: {}ms", elapsed.as_millis());
-        }
-    }
-}
-
-#[embassy_executor::task]
-async fn baro_task(i2c: SharedI2cBus, irq: BaroIrq) {
-    let mut baro = Bmp390::new_with_i2c(
-        i2c,
-        bmp390_rs::DEFAULT_I2C_ADDRESS,
-        Bmp390Config::default()
-            .enable_irq(true)
-            .with_output_data_rate(bmp390_rs::OutputDataRate::Hz25),
-        embassy_time::Delay,
-    );
-    let cal = baro.init().await.unwrap();
-    info!("bmp390_rs initialized");
-    let mut baroirq = Input::new(irq.irq, embassy_rp::gpio::Pull::None);
-    baro.start().await.unwrap();
-    info!("bmp390_rs started in continuous measurement mode");
-    let mut now = Instant::now();
-    let mut ctr = 0;
-    loop {
-        baroirq.wait_for_falling_edge().await;
-        let elapsed = now.elapsed();
-        now = Instant::now();
-        // Handle interrupt
-        if let Ok(data) = baro.measure().await {
-            if let Some((temp, pres, alt)) = cal.convert(data, Length::new::<meter>(0.0)) {
-                info!(
-                    "Temperature: {}°C, Pressure: {}hPa, Altitude: {}ft",
-                    temp.get::<degree_celsius>(),
-                    pres.get::<hectopascal>(),
-                    alt.get::<foot>()
-                );
-            }
-            info!("Time since last sample: {}ms", elapsed.as_millis());
-        }
-        ctr += 1;
-        if ctr >= 5 {
-            baro.stop().await.unwrap();
-            info!("bmp390_rs stopped");
-            break;
         }
     }
 }

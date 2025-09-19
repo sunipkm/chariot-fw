@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "fw-main",
+    "erase-flash",
+    "do-nothing",
     "mmc5983ma",
     "bmi323-rs",
     "bmp390-rs",

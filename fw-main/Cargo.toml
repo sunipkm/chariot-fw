@@ -62,8 +62,8 @@ mcp25xx = { version = "0.3", features = ["mcp25625"] }
 assign-resources = { git = "https://github.com/adamgreig/assign-resources", rev = "bd22cb7a92031fb16f74a5da42469d466c33383e" }
 
 mmc5983ma = { path = "../mmc5983ma", features = ["float"] }
-bmi323-rs = { path = "../bmi323-rs", features = ["float", "defmt"] }
-bmp390-rs = { path = "../bmp390-rs", features = ["defmt"] }
+bmi323-rs = { path = "../bmi323-rs", features = ["float"] }
+bmp390-rs = { path = "../bmp390-rs", features = [] }
 libm = { version = "0.2", default-features = false }
 
 [features]

@@ -129,7 +129,7 @@ pub trait AsyncFunctions<I, E, D> {
     async fn stop(&mut self) -> Result<(), Bmi323Error<E>>;
 
     /// Reads a measurement from the device.
-    async fn read_data(&mut self) -> Result<Measurement, Bmi323Error<E>>;
+    async fn measure(&mut self) -> Result<Measurement, Bmi323Error<E>>;
 
     /// Calibrate the gyroscope.
     async fn calibrate(&mut self, what: SelfCalibrateType) -> Result<(), Bmi323Error<E>>;
@@ -234,7 +234,7 @@ where
         Ok(())
     }
 
-    async fn read_data(&mut self) -> Result<Measurement, Bmi323Error<E>> {
+    async fn measure(&mut self) -> Result<Measurement, Bmi323Error<E>> {
         if !self.running {
             return Err(Bmi323Error::NotReady);
         }

@@ -1,0 +1,40 @@
+[package]
+name = "do-nothing"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+embassy-embedded-hal = { version = "0.5", features = ["defmt"] }
+embassy-executor = { version = "0.9", features = [
+    "arch-cortex-m",
+    "executor-thread",
+    "executor-interrupt",
+    "defmt",
+] }
+embassy-rp = { version = "0.8", features = [
+    "defmt",
+    "unstable-pac",
+    "time-driver",
+    "critical-section-impl",
+    "rp235xb",
+] }
+defmt = "1.0"
+defmt-rtt = "1.0"
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt = "0.7.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+embassy-time = { version = "0.5", features = ["defmt"] }
+
+[features]
+defmt = []
+default = ["defmt"]
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = 'z'
+
+[profile.dev]
+debug = 2
+lto = true
+opt-level = "z"

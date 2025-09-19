@@ -1,4 +1,4 @@
-use defmt::info;
+use defmt::{trace, warn};
 use embassy_rp::{
     flash::{Async, Error, PAGE_SIZE},
     peripherals::FLASH,
@@ -17,8 +17,8 @@ pub struct BufferedFlash<const SIZE: usize> {
 pub enum FlashError {
     ReadError(u32, Error),
     WriteError(u32, Error),
-    VerifyError(u32),
     BufferOverflow(usize),
+    OutOfMemory,
 }
 
 pub type FlashResult<T> = Result<T, FlashError>;
@@ -45,18 +45,14 @@ impl<const SIZE: usize> BufferedFlash<SIZE> {
                     }
                 }
                 Err(e) => {
-                    info!("Error reading flash at offset {:x}: {:?}", offset, e);
+                    trace!("Error reading flash at offset {:x}: {:?}", offset, e);
                     return Err(FlashError::ReadError(offset, e));
                 }
             }
         }
         let mut buf = Vec::from_array(buf);
         buf.clear();
-        Ok(Self {
-            offset,
-            buf,
-            flash,
-        })
+        Ok(Self { offset, buf, flash })
     }
 
     /// Inserts data into the buffer and writes to flash if the buffer is full.
@@ -73,13 +69,17 @@ impl<const SIZE: usize> BufferedFlash<SIZE> {
     pub fn insert<T: AsRef<[u8]>>(&mut self, data: T) -> FlashResult<Option<u32>> {
         let mut flushed = None;
         let mut data = ReadonlyVec::new(data.as_ref());
+        if self.buf.len() + data.len() + self.offset as usize > SIZE {
+            if !self.buf.is_empty() {
+                self.flush()?;
+            }
+            return Err(FlashError::OutOfMemory);
+        }
         while data.len() > 0 {
             let to_copy = core::cmp::min(data.len(), self.buf.capacity() - self.buf.len());
-            info!("To copy: {}", to_copy);
             self.buf
                 .extend_from_slice(data.drain(to_copy))
                 .map_err(|_| FlashError::BufferOverflow(data.len()))?;
-            info!("Buffer len: {}", self.buf.len());
             if self.buf.len() == self.buf.capacity() {
                 flushed = Some(self.flush()?);
             }
@@ -89,17 +89,25 @@ impl<const SIZE: usize> BufferedFlash<SIZE> {
 
     fn flush(&mut self) -> FlashResult<u32> {
         let curr_ofst = self.offset;
-        self.flash
-            .blocking_write(self.offset, &self.buf)
-            .map_err(|e| FlashError::WriteError(self.offset, e))?;
-        let read_buf = &mut [0u8; PAGE_SIZE][..self.buf.len()];
-        self.flash
-            .blocking_read(self.offset, read_buf)
-            .map_err(|e| FlashError::ReadError(self.offset, e))?;
-        if read_buf != self.buf.as_slice() {
-            return Err(FlashError::VerifyError(self.offset));
+        loop {
+            self.flash
+                .blocking_write(self.offset, &self.buf)
+                .map_err(|e| FlashError::WriteError(self.offset, e))?;
+            let read_buf = &mut [0u8; PAGE_SIZE][..self.buf.len()];
+            self.flash
+                .blocking_read(self.offset, read_buf)
+                .map_err(|e| FlashError::ReadError(self.offset, e))?;
+            if read_buf != self.buf.as_slice() {
+                warn!("Flash verify error at offset 0x{:x}", self.offset);
+                // info!("Expected: {=[u8]:#x}", self.buf.as_slice());
+                // info!("Read:     {=[u8]:#x}", read_buf);
+                self.offset += self.buf.len() as u32;
+                continue;
+            } else {
+                self.offset += self.buf.len() as u32;
+                break;
+            }
         }
-        self.offset += self.buf.len() as u32;
         self.buf.clear();
         Ok(curr_ofst)
     }
@@ -107,6 +115,11 @@ impl<const SIZE: usize> BufferedFlash<SIZE> {
     /// Returns the current write offset in flash memory.
     pub fn current_offset(&self) -> u32 {
         self.offset
+    }
+
+    /// Returns the remaining space in the buffer.
+    pub fn remaining(&self) -> usize {
+        SIZE - self.offset as usize
     }
 }
 
