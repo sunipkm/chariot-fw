@@ -163,6 +163,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bmp390-rs"
+version = "0.0.1"
+dependencies = [
+ "bitfield-struct",
+ "defmt 1.0.1",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "libm",
+ "uom",
+]
+
+[[package]]
 name = "byte-slice-cast"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -193,6 +205,7 @@ dependencies = [
  "assign-resources",
  "bincode",
  "bmi323-rs",
+ "bmp390-rs",
  "byte-slice-cast",
  "cortex-m",
  "cortex-m-rt",
@@ -1839,6 +1852,16 @@ name = "unty"
 version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+
+[[package]]
+name = "uom"
+version = "0.37.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd5cfe7d84f6774726717f358a37f5bca8fca273bed4de40604ad129d1107b49"
+dependencies = [
+ "num-traits",
+ "typenum",
+]
 
 [[package]]
 name = "usb-device"

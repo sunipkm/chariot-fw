@@ -1,0 +1,46 @@
+[package]
+name = "bmp390-rs"
+version = "0.0.1"
+edition = "2021"
+readme = "README.md"
+authors = ["Sunip K. Mukherjee <sunipkmukherjee@gmail.com>"]
+license = "Apache-2.0"
+keywords = [
+    "inertial",
+    "accelerometer",
+    "gyroscope",
+    "imu",
+    "embedded-hal-driver",
+    "no_std",
+]
+categories = ["embedded", "hardware-support", "no-std"]
+documentation = "https://docs.rs/bmp390-rs"
+description = "Platform agnostic Rust driver for the BMP390 pressure sensor."
+
+include = [
+    "/**/*.rs",
+    "/Cargo.toml",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-APACHE",
+]
+
+
+[features]
+default = ["float", "async", "sync"]
+defmt = ["dep:defmt", "dep:libm"]
+float = []
+async = ["dep:embedded-hal-async"]
+sync = ["dep:embedded-hal"]
+
+[dependencies]
+bitfield-struct = "0.11"
+defmt = { version = "1.0", "optional" = true }
+embedded-hal-async = { version = "1.0", optional = true }
+embedded-hal = { version = "1.0", optional = true }
+libm = { version = "0.2", default-features = false, optional = true }
+uom = { version = "0.37", default-features = false, features = [
+    "f32",
+    "si",
+    "autoconvert",
+] }

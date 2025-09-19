@@ -63,6 +63,7 @@ assign-resources = { git = "https://github.com/adamgreig/assign-resources", rev 
 
 mmc5983ma = { path = "../mmc5983ma", features = ["float"] }
 bmi323-rs = { path = "../bmi323-rs", features = ["float", "defmt"] }
+bmp390-rs = { path = "../bmp390-rs", features = ["defmt"] }
 libm = { version = "0.2", default-features = false }
 
 [features]

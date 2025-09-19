@@ -9,7 +9,7 @@ use crate::{
         GyroConfig, GyroSelfCalibSelect, I2cWatchdogConfig, IbiStatus, Int1Status, Int2Status,
         IntLatchConfig, IntPinConfig, IoPadStrength, Register, SaturationReg, SensorInterruptMap,
         StatusReg, ACCEL_DATA_ADDR,
-    }, AccelMode, Bmi323, GyroMode, Measurement, MeasurementRaw3D, Mmc5983Error, SelfCalibrateType, MAX_LOOPS
+    }, AccelMode, Bmi323, GyroMode, Measurement, MeasurementRaw3D, Bmi323Error, SelfCalibrateType, MAX_LOOPS
 };
 use embedded_hal_async::{delay::DelayNs, i2c, spi};
 
@@ -113,29 +113,29 @@ macro_rules! impl_async_register {
 
 impl_async_register! {ErrorReg, StatusReg, SaturationReg, Int1Status, Int2Status, IbiStatus, FeatEngConfig, FeatEngIo0, FeatEngIoStat, FifoFillLevel, AccelConfig, GyroConfig, FifoWatermark, FifoConfig, FifoCtrl, IntPinConfig, IntLatchConfig, FeatureInterruptMap, SensorInterruptMap, FeatureEngineControl, FeatEngAddr, FeatureDataTx, FeatureDataStatus, FeatureEngineStatus, IoPadStrength, I2cWatchdogConfig, Command, DeviceId, GyroSelfCalibSelect}
 
-/// Synchronous functions for the MMC5983MA sensor.
+/// Synchronous functions for the BMI323 sensor.
 #[allow(async_fn_in_trait)]
 pub trait AsyncFunctions<I, E, D> {
     /// Initialize the device.
-    async fn init(&mut self) -> Result<(), Mmc5983Error<E>>;
+    async fn init(&mut self) -> Result<(), Bmi323Error<E>>;
 
     /// Resets the device.
-    async fn reset(&mut self) -> Result<(), Mmc5983Error<E>>;
+    async fn reset(&mut self) -> Result<(), Bmi323Error<E>>;
 
     /// Starts continuous measurement mode.
-    async fn start(&mut self) -> Result<(), Mmc5983Error<E>>;
+    async fn start(&mut self) -> Result<(), Bmi323Error<E>>;
 
     /// Stops continuous measurement mode.
-    async fn stop(&mut self) -> Result<(), Mmc5983Error<E>>;
+    async fn stop(&mut self) -> Result<(), Bmi323Error<E>>;
 
     /// Reads a measurement from the device.
-    async fn read_data(&mut self) -> Result<Measurement, Mmc5983Error<E>>;
+    async fn read_data(&mut self) -> Result<Measurement, Bmi323Error<E>>;
 
     /// Calibrate the gyroscope.
-    async fn calibrate(&mut self, what: SelfCalibrateType) -> Result<(), Mmc5983Error<E>>;
+    async fn calibrate(&mut self, what: SelfCalibrateType) -> Result<(), Bmi323Error<E>>;
 
     /// Check if calibration is applied.
-    async fn is_calibration_applied(&mut self) -> Result<bool, Mmc5983Error<E>>;
+    async fn is_calibration_applied(&mut self) -> Result<bool, Bmi323Error<E>>;
 }
 
 impl<IFACE, E, D> AsyncFunctions<IFACE, E, D> for Bmi323<IFACE, D>
@@ -143,16 +143,16 @@ where
     IFACE: AsyncInterface<Error = E>,
     D: DelayNs,
 {
-    async fn init(&mut self) -> Result<(), Mmc5983Error<E>> {
+    async fn init(&mut self) -> Result<(), Bmi323Error<E>> {
         // Check device ID
         let device_id = DeviceId::read_register(&mut self.iface).await?;
         if !device_id.validate() {
-            return Err(Mmc5983Error::InvalidDevice);
+            return Err(Bmi323Error::InvalidDevice);
         }
         self.reset().await
     }
 
-    async fn reset(&mut self) -> Result<(), Mmc5983Error<E>> {
+    async fn reset(&mut self) -> Result<(), Bmi323Error<E>> {
         // Reset device
         Command::SoftReset.write_register(&mut self.iface).await?;
         self.delay.delay_ms(20).await;
@@ -180,22 +180,22 @@ where
 
         let error = ErrorReg::read_register(&mut self.iface).await?;
         if error.fatal() {
-            Err(Mmc5983Error::FatalError)
+            Err(Bmi323Error::FatalError)
         } else if error.accel_conf() {
-            Err(Mmc5983Error::InvalidAccelConfig)
+            Err(Bmi323Error::InvalidAccelConfig)
         } else if error.gyro_conf() {
-            Err(Mmc5983Error::InvalidGyroConfig)
+            Err(Bmi323Error::InvalidGyroConfig)
         } else {
             Ok(())
         }
     }
 
-    async fn start(&mut self) -> Result<(), Mmc5983Error<E>> {
+    async fn start(&mut self) -> Result<(), Bmi323Error<E>> {
         if self.running {
             return Ok(());
         }
         if self.config.sensors_enabled == AccGyroEnabled::None {
-            return Err(Mmc5983Error::NoSensorsEnabled);
+            return Err(Bmi323Error::NoSensorsEnabled);
         }
         // Enable sensors
         let mut accel_config = AccelConfig::read_register(&mut self.iface).await?;
@@ -219,7 +219,7 @@ where
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<(), Mmc5983Error<E>> {
+    async fn stop(&mut self) -> Result<(), Bmi323Error<E>> {
         if !self.running {
             return Ok(());
         }
@@ -234,9 +234,9 @@ where
         Ok(())
     }
 
-    async fn read_data(&mut self) -> Result<Measurement, Mmc5983Error<E>> {
+    async fn read_data(&mut self) -> Result<Measurement, Bmi323Error<E>> {
         if !self.running {
-            return Err(Mmc5983Error::NotReady);
+            return Err(Bmi323Error::NotReady);
         }
         let status = if !self.config.irq_enabled {
             let mut ctr = MAX_LOOPS;
@@ -248,7 +248,7 @@ where
                 self.delay.delay_us(self.config.min_delay_us).await;
                 ctr -= 1;
                 if ctr == 0 {
-                    return Err(Mmc5983Error::NoDataAvailable);
+                    return Err(Bmi323Error::NoDataAvailable);
                 }
             }
         } else {
@@ -260,7 +260,7 @@ where
         }
         let read = status.drdy_acc() || status.drdy_gyr() || status.drdy_temp();
         if !read {
-            return Err(Mmc5983Error::NoDataAvailable);
+            return Err(Bmi323Error::NoDataAvailable);
         }
         let mut buf = [0u8; 18];
         self.iface.write_read(ACCEL_DATA_ADDR, &mut buf).await?;
@@ -301,16 +301,16 @@ where
         })
     }
 
-    async fn calibrate(&mut self, what: SelfCalibrateType) -> Result<(), Mmc5983Error<E>> {
+    async fn calibrate(&mut self, what: SelfCalibrateType) -> Result<(), Bmi323Error<E>> {
         if self.running {
-            return Err(Mmc5983Error::Busy);
+            return Err(Bmi323Error::Busy);
         }
         let feature_eng_stat = FeatEngIo0::read_register(&mut self.iface).await?;
         if !(feature_eng_stat.errors() == FeatureIo1Error::Active
             || feature_eng_stat.errors() == FeatureIo1Error::Activated
             || feature_eng_stat.errors() == FeatureIo1Error::NoError)
         {
-            return Err(Mmc5983Error::RestartRequired);
+            return Err(Bmi323Error::RestartRequired);
         }
         let irq_config = IntPinConfig::new()
             .with_int1_output_en(false)
@@ -335,7 +335,7 @@ where
         self.delay.delay_ms(50).await;
         let errors = ErrorReg::read_register(&mut self.iface).await?;
         if errors.fatal() || errors.accel_conf() || errors.gyro_conf() {
-            return Err(Mmc5983Error::FatalError);
+            return Err(Bmi323Error::FatalError);
         }
         #[cfg(feature = "defmt")]
         {
@@ -363,7 +363,7 @@ where
             self.delay.delay_ms(5).await;
             ctr -= 1;
             if ctr == 0 {
-                return Err(Mmc5983Error::SelfCalTimedOut);
+                return Err(Bmi323Error::SelfCalTimedOut);
             }
         }
         #[cfg(feature = "defmt")]
@@ -376,13 +376,13 @@ where
         accel_cfg.write_register(&mut self.iface).await?;
         let error = ErrorReg::read_register(&mut self.iface).await?;
         if error.sensor_fatal() {
-            Err(Mmc5983Error::FatalError)
+            Err(Bmi323Error::FatalError)
         } else {
             Ok(())
         }
     }
     
-    async fn is_calibration_applied(&mut self) -> Result<bool, Mmc5983Error<E>> {
+    async fn is_calibration_applied(&mut self) -> Result<bool, Bmi323Error<E>> {
         let gyro_self_calib = GyroSelfCalibSelect::read_register(&mut self.iface).await?;
         Ok(gyro_self_calib.apply())
     }

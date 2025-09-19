@@ -38,7 +38,7 @@ pub struct Bmi323<IFACE, D> {
 }
 
 impl<I2C, D> Bmi323<I2cInterface<I2C>, D> {
-    /// Create a new instance of the [`Mmc5983`] device.
+    /// Create a new instance of the [`Bmi323`] device.
     ///
     /// # Arguments
     /// * `i2c` - The I2C peripheral to use.
@@ -47,8 +47,8 @@ impl<I2C, D> Bmi323<I2cInterface<I2C>, D> {
     /// * `delay` - A delay provider to use for initialization.
     ///
     /// # Errors
-    /// * Returns `Mmc5983Error::I2C` if there is an error communicating with the device.
-    /// * Returns `Mmc5983Error::InvalidDevice` if the device ID is incorrect.
+    /// * Returns [`Bmi323Error::Comm`] if there is an error communicating with the device.
+    /// * Returns [`Bmi323Error::InvalidDevice`] if the device ID is incorrect.
     pub fn new_with_i2c(i2c: I2C, address: u8, config: Bmi323Config, delay: D) -> Self {
         Self {
             iface: I2cInterface { i2c, address },
@@ -60,7 +60,7 @@ impl<I2C, D> Bmi323<I2cInterface<I2C>, D> {
 }
 
 impl<SPI, D> Bmi323<SpiInterface<SPI>, D> {
-    /// Create a new instance of the [`Mmc5983`] device.
+    /// Create a new instance of the [`Bmi323`] device.
     ///
     /// # Arguments
     /// * `spi` - The SPI peripheral to use.
@@ -68,8 +68,8 @@ impl<SPI, D> Bmi323<SpiInterface<SPI>, D> {
     /// * `delay` - A delay provider to use for initialization.
     ///
     /// # Errors
-    /// * Returns `Mmc5983Error::I2C` if there is an error communicating with the device.
-    /// * Returns `Mmc5983Error::InvalidDevice` if the device ID is incorrect.
+    /// * Returns `Bmi323Error::Comm` if there is an error communicating with the device.
+    /// * Returns `Bmi323Error::InvalidDevice` if the device ID is incorrect.
     pub async fn new_with_spi(spi: SPI, config: Bmi323Config, delay: D) -> Self {
         Self {
             iface: SpiInterface { spi },
@@ -80,9 +80,9 @@ impl<SPI, D> Bmi323<SpiInterface<SPI>, D> {
     }
 }
 
-/// Errors that can occur when interacting with the MMC5983MA sensor.
+/// Errors that can occur when interacting with the BMI323 sensor.
 #[derive(Debug, Clone)]
-pub enum Mmc5983Error<CommError> {
+pub enum Bmi323Error<CommError> {
     /// I2C communication error
     Comm(CommError),
     /// Fatal error reported by the sensor
@@ -107,9 +107,9 @@ pub enum Mmc5983Error<CommError> {
     NoSensorsEnabled,
 }
 
-impl<CommError> From<CommError> for Mmc5983Error<CommError> {
+impl<CommError> From<CommError> for Bmi323Error<CommError> {
     fn from(err: CommError) -> Self {
-        Mmc5983Error::Comm(err)
+        Bmi323Error::Comm(err)
     }
 }
 

@@ -4,7 +4,8 @@
 #![no_main]
 
 use assign_resources::assign_resources;
-use bmi323_rs::{AsyncFunctions as ImuAsyncFunctions, Bmi323, Bmi323Config, GyroRange};
+use bmi323_rs::{AsyncFunctions as _, Bmi323, Bmi323Config, GyroRange};
+use bmp390_rs::{degree_celsius, foot, hectopascal, meter, AsyncFunctions as _, Bmp390, Bmp390Config, Length};
 use defmt::*;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
@@ -17,9 +18,10 @@ use embassy_rp::{
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
+#[allow(unused_imports)]
 use embassy_time::{Instant, Timer};
 use mmc5983ma::{
-    AsyncFunctions as MagAsyncFunctions, ContinuousMeasurementFreq, DEFAULT_I2C_ADDRESS, Mmc5983,
+    AsyncFunctions as _, ContinuousMeasurementFreq, DEFAULT_I2C_ADDRESS, Mmc5983,
     Mmc5983ConfigBuilder,
 };
 use static_cell::StaticCell;
@@ -47,11 +49,15 @@ assign_resources! {
     imuirq: ImuIrq {
         irq: PIN_31,
     }
+    baroirq: BaroIrq {
+        irq: PIN_33,
+    }
 }
 
 mod buffered_flash;
 use crate::buffered_flash::BufferedFlash;
 
+#[allow(unused)]
 const FLASH_SIZE: usize = 2 * 1024 * 1024;
 
 #[embassy_executor::main]
@@ -71,12 +77,16 @@ async fn main(spawner: Spawner) {
     let i2c_bus = I2C_BUS.init(i2c);
     let mmc_i2c = I2cDevice::new(i2c_bus);
     let imu_i2c = I2cDevice::new(i2c_bus);
+    let baro_i2c = I2cDevice::new(i2c_bus);
 
+    // Spawn tasks to handle each sensor
     spawner
         .spawn(magnetometer_task(mmc_i2c, resources.mmcirq))
         .unwrap();
-
     spawner.spawn(imu_task(imu_i2c, resources.imuirq)).unwrap();
+    spawner
+        .spawn(baro_task(baro_i2c, resources.baroirq))
+        .unwrap();
 
     // add some delay to give an attached debug probe time to parse the
     // defmt RTT header. Reading that header might touch flash memory, which
@@ -206,6 +216,48 @@ async fn imu_task(i2c: SharedI2cBus, irq: ImuIrq) {
                 info!("Temperature: {}°C", temp.celcius());
             }
             info!("Time since last sample: {}ms", elapsed.as_millis());
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn baro_task(i2c: SharedI2cBus, irq: BaroIrq) {
+    let mut baro = Bmp390::new_with_i2c(
+        i2c,
+        bmp390_rs::DEFAULT_I2C_ADDRESS,
+        Bmp390Config::default()
+            .enable_irq(true)
+            .with_output_data_rate(bmp390_rs::OutputDataRate::Hz25),
+        embassy_time::Delay,
+    );
+    let cal = baro.init().await.unwrap();
+    info!("bmp390_rs initialized");
+    let mut baroirq = Input::new(irq.irq, embassy_rp::gpio::Pull::None);
+    baro.start().await.unwrap();
+    info!("bmp390_rs started in continuous measurement mode");
+    let mut now = Instant::now();
+    let mut ctr = 0;
+    loop {
+        baroirq.wait_for_falling_edge().await;
+        let elapsed = now.elapsed();
+        now = Instant::now();
+        // Handle interrupt
+        if let Ok(data) = baro.measure().await {
+            if let Some((temp, pres, alt)) = cal.convert(data, Length::new::<meter>(0.0)) {
+                info!(
+                    "Temperature: {}°C, Pressure: {}hPa, Altitude: {}ft",
+                    temp.get::<degree_celsius>(),
+                    pres.get::<hectopascal>(),
+                    alt.get::<foot>()
+                );
+            }
+            info!("Time since last sample: {}ms", elapsed.as_millis());
+        }
+        ctr += 1;
+        if ctr >= 5 {
+            baro.stop().await.unwrap();
+            info!("bmp390_rs stopped");
+            break;
         }
     }
 }
