@@ -69,13 +69,3 @@ libm = { version = "0.2", default-features = false }
 [features]
 defmt = []
 default = ["defmt"]
-
-[profile.release]
-debug = 2
-lto = true
-opt-level = 'z'
-
-[profile.dev]
-debug = 2
-lto = true
-opt-level = "z"

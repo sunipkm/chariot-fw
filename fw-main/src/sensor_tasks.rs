@@ -39,10 +39,10 @@ pub async fn magnetometer_task(
     trace!("Starting MMC5983MA interrupt-driven measurements...");
     mmc.start().await.unwrap();
     trace!("Waiting for interrupts from MMC5983MA...");
-    let mut now = Instant::now();
+    let mut last = Instant::now();
     loop {
         mmcirq.wait_for_any_edge().await;
-        let elapsed = now.elapsed();
+        let now = Instant::now();
         let mag = mmc.get_mag().await.unwrap().milligauss();
         let field_mag = libm::sqrtf(mag.x * mag.x + mag.y * mag.y + mag.z * mag.z);
         let theta = libm::acosf(mag.z / field_mag) * 180.0 / core::f32::consts::PI;
@@ -51,14 +51,14 @@ pub async fn magnetometer_task(
             "Magnetometer reading: x={} y={} z={}, mag={}, θ={}° φ={}°",
             mag.x, mag.y, mag.z, field_mag, theta, phi
         );
-        if elapsed >= CADENCE {
-            now = Instant::now();
+        if now.duration_since(last) >= CADENCE {
+            last = now;
             if !sender.is_full() {
                 let measurement = CommonMeasurement::Mag(mag.x, mag.y, mag.z);
                 sender
                     .send(SingleMeasurement {
                         measurement,
-                        timestamp: tref.elapsed().as_millis() as u32,
+                        timestamp: tref.duration_since(last).as_millis() as u32,
                     })
                     .await;
             }
@@ -92,10 +92,10 @@ pub async fn imu_task(i2c: SharedI2cBus, irq: ImuIrq, sender: MeasurementSender,
     let mut imuirq = Input::new(irq.irq, embassy_rp::gpio::Pull::None);
     imu.start().await.unwrap();
     trace!("bmi323_rs started in continuous measurement mode");
-    let mut now = Instant::now();
+    let mut last = Instant::now();
     loop {
         imuirq.wait_for_falling_edge().await;
-        let elapsed = now.elapsed();
+        let now = Instant::now();
         // Handle interrupt
         if let Ok(data) = imu.measure().await {
             let accel = if let Some(accel) = data.accel {
@@ -121,15 +121,15 @@ pub async fn imu_task(i2c: SharedI2cBus, irq: ImuIrq, sender: MeasurementSender,
             if let Some(temp) = data.temp {
                 trace!("Temperature: {}°C", temp.celcius());
             }
-            if elapsed >= CADENCE {
-                now = Instant::now();
+            if now.duration_since(last) >= CADENCE {
+                last = now;
                 if !sender.is_full() {
                     if let Some((ax, ay, az)) = accel {
                         let measurement = CommonMeasurement::Accel(ax, ay, az);
                         sender
                             .send(SingleMeasurement {
                                 measurement,
-                                timestamp: tref.elapsed().as_millis() as u32,
+                                timestamp: last.duration_since(tref).as_millis() as u32,
                             })
                             .await;
                     }
@@ -138,7 +138,7 @@ pub async fn imu_task(i2c: SharedI2cBus, irq: ImuIrq, sender: MeasurementSender,
                         sender
                             .send(SingleMeasurement {
                                 measurement,
-                                timestamp: tref.elapsed().as_millis() as u32,
+                                timestamp: last.duration_since(tref).as_millis() as u32,
                             })
                             .await;
                     }
@@ -166,10 +166,10 @@ pub async fn baro_task(i2c: SharedI2cBus, irq: BaroIrq, sender: MeasurementSende
     let mut baroirq = Input::new(irq.irq, embassy_rp::gpio::Pull::None);
     baro.start().await.unwrap();
     trace!("bmp390_rs started in continuous measurement mode");
-    let mut now = Instant::now();
+    let mut last = Instant::now();
     loop {
         baroirq.wait_for_falling_edge().await;
-        let elapsed = now.elapsed();
+        let now = Instant::now();
         // Handle interrupt
         if let Ok(data) = baro.measure().await {
             if let Some((temp, pres, alt)) = cal.convert(data, Length::new::<meter>(0.0)) {
@@ -179,8 +179,8 @@ pub async fn baro_task(i2c: SharedI2cBus, irq: BaroIrq, sender: MeasurementSende
                     pres.get::<hectopascal>(),
                     alt.get::<foot>()
                 );
-                if elapsed >= CADENCE {
-                    now = Instant::now();
+                if now.duration_since(last) >= CADENCE {
+                    last = now;
                     if !sender.is_full() {
                         let measurement = CommonMeasurement::Baro(
                             temp.get::<degree_celsius>(),
@@ -190,7 +190,7 @@ pub async fn baro_task(i2c: SharedI2cBus, irq: BaroIrq, sender: MeasurementSende
                         sender
                             .send(SingleMeasurement {
                                 measurement,
-                                timestamp: tref.elapsed().as_millis() as u32,
+                                timestamp: last.duration_since(tref).as_millis() as u32,
                             })
                             .await;
                     }
