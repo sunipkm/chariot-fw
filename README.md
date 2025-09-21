@@ -25,7 +25,7 @@
    ```sh
    cargo run -p erase-flash --release
    ```
-  The flash eraser will crash at the end, this is expected.
+   The flash eraser will crash at the end, this is expected.
 4. Flash the firmware:
    ```sh
    cargo run -p chariot-fw --release | tee preflight_`date +%Y%m%d-%H%M%S`.log
