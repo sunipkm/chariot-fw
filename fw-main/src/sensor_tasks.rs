@@ -58,7 +58,7 @@ pub async fn magnetometer_task(
                 sender
                     .send(SingleMeasurement {
                         measurement,
-                        timestamp: tref.duration_since(last).as_millis() as u32,
+                        timestamp: last.duration_since(tref).as_millis() as u32,
                     })
                     .await;
             }

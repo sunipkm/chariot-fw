@@ -28,7 +28,7 @@
    The flash eraser will crash at the end, this is expected.
 4. Flash the firmware:
    ```sh
-   cargo run -p chariot-fw --release | tee preflight_`date +%Y%m%d-%H%M%S`.log
+   cargo run -p chariot-fw --release | tee preflight_`date -u +%Y%m%d-%H%M%S`.log
    ```
 5. Monitor the output log for any errors or important information. Specifically, look for the line indicating the start offset of the flash memory where measurements are being stored. Press <kbd>Ctrl</kbd> + <kbd>C</kbd> to stop logging once you have noted the offset.
 
@@ -37,7 +37,7 @@
 2. Connect the debug probe to your computer and the target board.
 3. Attach to the target using `probe-rs`, and make note of the system state:
     ```sh
-    probe-rs attach target/thumbv8m.main-none-eabihf/release/chariot-fw | tee postflight_`date +%Y%m%d-%H%M%S`.log
+    probe-rs attach target/thumbv8m.main-none-eabihf/release/chariot-fw | tee postflight_`date -u +%Y%m%d-%H%M%S`.log
     ```
     Hit <kbd>Ctrl</kbd> + <kbd>C</kbd> to detach.
 4. Flash the `do-nothing` binary to prevent further writes to flash:
