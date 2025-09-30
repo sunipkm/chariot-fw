@@ -7,8 +7,8 @@ pub use crate::{
     config::{Bmi323Config, IrqPinConfig},
     interface::{I2cInterface, SpiInterface},
     registers::{
-        Bandwidth, AveragingSamples, OutputDataRate, AccelMode, AccelRange, GyroMode, GyroRange,
-        IrqMap,
+        AccelMode, AccelRange, AveragingSamples, Bandwidth, GyroMode, GyroRange, IrqMap,
+        OutputDataRate,
     },
 };
 
@@ -132,12 +132,8 @@ impl MeasurementRaw3D {
     /// Convert the raw measurement data to floating point values in physical units
     pub fn float(&self) -> (f32, f32, f32) {
         let sensitivity = match self.kind() {
-            Measurement3DKind::Accel(range) => {
-                range.sensitivity()
-            }
-            Measurement3DKind::Gyro(range) => {
-                range.sensitivity()
-            }
+            Measurement3DKind::Accel(range) => range.sensitivity(),
+            Measurement3DKind::Gyro(range) => range.sensitivity(),
         };
         (
             self.x() as f32 / sensitivity,
@@ -174,7 +170,6 @@ pub struct Measurement {
     /// Timestamp data, if enabled
     pub timestamp: TimestampMeasurement,
 }
-
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -217,7 +212,10 @@ pub enum SelfCalibrateType {
 
 impl SelfCalibrateType {
     pub(crate) const fn sensitivity(&self) -> bool {
-        matches!(self, SelfCalibrateType::Sensitivity | SelfCalibrateType::Both)
+        matches!(
+            self,
+            SelfCalibrateType::Sensitivity | SelfCalibrateType::Both
+        )
     }
     pub(crate) const fn offset(&self) -> bool {
         matches!(self, SelfCalibrateType::Offset | SelfCalibrateType::Both)

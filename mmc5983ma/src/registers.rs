@@ -4,7 +4,6 @@ use defmt::info;
 
 use crate::{MagMeasurementRaw, Mmc5983};
 
-
 pub(crate) trait Register {
     const ADDRESS: u8;
     fn from_u8(value: u8) -> Self
@@ -228,9 +227,12 @@ impl From<(i32, i32, i32)> for MagMeasurementRaw {
     }
 }
 
-impl <I2C, D> Mmc5983<I2C, D>
-{
-    pub(crate) fn update_offsets(&mut self, mag_set: MagMeasurementRaw, mag_reset: MagMeasurementRaw) {
+impl<I2C, D> Mmc5983<I2C, D> {
+    pub(crate) fn update_offsets(
+        &mut self,
+        mag_set: MagMeasurementRaw,
+        mag_reset: MagMeasurementRaw,
+    ) {
         let fx = (mag_set.x() - mag_reset.x()) / 2;
         let fy = (mag_set.y() - mag_reset.y()) / 2;
         let fz = (mag_set.z() - mag_reset.z()) / 2;

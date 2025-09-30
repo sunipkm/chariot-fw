@@ -1,8 +1,11 @@
-use crate::{registers::{
-    AccelConfig, Bandwidth, AveragingSamples, OutputDataRate, AccelMode, AccelRange,
-    FeatureEngineControl, FifoConfig, GyroConfig, GyroMode, I2cWatchdogConfig, IrqMap,
-    IntPinConfig, SensorInterruptMap,
-}, GyroRange};
+use crate::{
+    registers::{
+        AccelConfig, AccelMode, AccelRange, AveragingSamples, Bandwidth, FeatureEngineControl,
+        FifoConfig, GyroConfig, GyroMode, I2cWatchdogConfig, IntPinConfig, IrqMap, OutputDataRate,
+        SensorInterruptMap,
+    },
+    GyroRange,
+};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

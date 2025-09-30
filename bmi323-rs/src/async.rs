@@ -2,14 +2,18 @@
 use defmt::{debug, info, trace, warn};
 
 use crate::{
-    config::AccGyroEnabled, interface::{I2cInterface, Interface, SpiInterface}, registers::{
+    config::AccGyroEnabled,
+    interface::{I2cInterface, Interface, SpiInterface},
+    registers::{
         AccelConfig, Command, DeviceId, ErrorReg, FeatEngAddr, FeatEngConfig, FeatEngIo0,
         FeatEngIoStat, FeatureDataStatus, FeatureDataTx, FeatureEngineControl, FeatureEngineStatus,
         FeatureInterruptMap, FeatureIo1Error, FifoConfig, FifoCtrl, FifoFillLevel, FifoWatermark,
         GyroConfig, GyroSelfCalibSelect, I2cWatchdogConfig, IbiStatus, Int1Status, Int2Status,
         IntLatchConfig, IntPinConfig, IoPadStrength, Register, SaturationReg, SensorInterruptMap,
         StatusReg, ACCEL_DATA_ADDR,
-    }, AccelMode, Bmi323, GyroMode, Measurement, MeasurementRaw3D, Bmi323Error, SelfCalibrateType, MAX_LOOPS
+    },
+    AccelMode, Bmi323, Bmi323Error, GyroMode, Measurement, MeasurementRaw3D, SelfCalibrateType,
+    MAX_LOOPS,
 };
 use embedded_hal_async::{delay::DelayNs, i2c, spi};
 
@@ -341,7 +345,9 @@ where
         {
             warn!("Starting gyro calibration, keep the device still...");
         }
-        Command::GyroSelfCalib.write_register(&mut self.iface).await?;
+        Command::GyroSelfCalib
+            .write_register(&mut self.iface)
+            .await?;
         self.delay.delay_ms(350).await;
         #[cfg(feature = "defmt")]
         {
@@ -381,7 +387,7 @@ where
             Ok(())
         }
     }
-    
+
     async fn is_calibration_applied(&mut self) -> Result<bool, Bmi323Error<E>> {
         let gyro_self_calib = GyroSelfCalibSelect::read_register(&mut self.iface).await?;
         Ok(gyro_self_calib.apply())

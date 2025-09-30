@@ -321,17 +321,9 @@ where
         #[cfg(feature = "defmt")]
         {
             if error.to_u8() != 0 {
-                warn!(
-                    "Error Register [{=u8:#x}]: {}",
-                    ErrorReg::ADDRESS,
-                    error
-                );
+                warn!("Error Register [{=u8:#x}]: {}", ErrorReg::ADDRESS, error);
             } else {
-                debug!(
-                    "Error Register [{=u8:#x}]: {}",
-                    ErrorReg::ADDRESS,
-                    error
-                );
+                debug!("Error Register [{=u8:#x}]: {}", ErrorReg::ADDRESS, error);
             }
         }
         if error.fatal() {

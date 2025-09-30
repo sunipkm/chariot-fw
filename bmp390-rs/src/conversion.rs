@@ -17,7 +17,7 @@ use crate::Measurement;
 /// # Datasheet
 /// - Section 3.11 Output compensation.
 /// - Appendix A: Computation formulae reference implementation.
-#[derive(Debug, Clone, Copy, )]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub struct CalibrationCoefficients {
     par_t1: f32,

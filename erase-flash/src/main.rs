@@ -24,7 +24,9 @@ async fn main(_spawner: Spawner) {
 
     let mut offset = FLASH_SIZE - ERASE_SIZE;
     while offset > 0 {
-        flash.blocking_erase(offset as u32, (offset + ERASE_SIZE) as u32).unwrap();
+        flash
+            .blocking_erase(offset as u32, (offset + ERASE_SIZE) as u32)
+            .unwrap();
         info!("erased 0x{:X}..0x{:X}", offset, offset + ERASE_SIZE);
         offset -= ERASE_SIZE;
     }

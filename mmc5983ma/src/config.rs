@@ -188,9 +188,7 @@ impl Mmc5983ConfigBuilder {
 }
 
 impl Mmc5983Config {
-    pub(crate) fn to_registers(
-        self,
-    ) -> (AnalogControl, MeasurementTriggerControl, DigitalControl) {
+    pub(crate) fn to_registers(self) -> (AnalogControl, MeasurementTriggerControl, DigitalControl) {
         let mut analogctrl = AnalogControl::from(0);
         let mut digitalctrl = DigitalControl::from(0);
         let mut meastrigctrl = MeasurementTriggerControl::from(0);
@@ -204,9 +202,21 @@ impl Mmc5983Config {
         #[cfg(feature = "defmt")]
         {
             use crate::registers::Register;
-            defmt::debug!("Analog Control [0x{:02X}]: 0b{:08b}", AnalogControl::ADDRESS, analogctrl.to_u8());
-            defmt::debug!("Digital Control [0x{:02X}]: 0b{:08b}", DigitalControl::ADDRESS, digitalctrl.to_u8());
-            defmt::debug!("Measurement Trigger Control [0x{:02X}]: 0b{:08b}", MeasurementTriggerControl::ADDRESS, meastrigctrl.to_u8());
+            defmt::debug!(
+                "Analog Control [0x{:02X}]: 0b{:08b}",
+                AnalogControl::ADDRESS,
+                analogctrl.to_u8()
+            );
+            defmt::debug!(
+                "Digital Control [0x{:02X}]: 0b{:08b}",
+                DigitalControl::ADDRESS,
+                digitalctrl.to_u8()
+            );
+            defmt::debug!(
+                "Measurement Trigger Control [0x{:02X}]: 0b{:08b}",
+                MeasurementTriggerControl::ADDRESS,
+                meastrigctrl.to_u8()
+            );
         }
         (analogctrl, meastrigctrl, digitalctrl)
     }

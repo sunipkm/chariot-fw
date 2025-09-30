@@ -2,14 +2,17 @@
 use defmt::{debug, info, trace, warn};
 
 use crate::{
-    interface::{I2cInterface, Interface, SpiInterface}, registers::{
+    interface::{I2cInterface, Interface, SpiInterface},
+    registers::{
         AccelConfig, Command, DeviceId, ErrorReg, FeatEngAddr, FeatEngConfig, FeatEngIo0,
         FeatEngIoStat, FeatureDataStatus, FeatureDataTx, FeatureEngineControl, FeatureEngineStatus,
         FeatureInterruptMap, FeatureIo1Error, FifoConfig, FifoCtrl, FifoFillLevel, FifoWatermark,
         GyroConfig, GyroSelfCalibSelect, I2cWatchdogConfig, IbiStatus, Int1Status, Int2Status,
         IntLatchConfig, IntPinConfig, IoPadStrength, Register, SaturationReg, SensorInterruptMap,
         StatusReg, ACCEL_DATA_ADDR,
-    }, AccelMode, Bmi323, GyroMode, Measurement, MeasurementRaw3D, Bmi323Error, SelfCalibrateType, MAX_LOOPS
+    },
+    AccelMode, Bmi323, Bmi323Error, GyroMode, Measurement, MeasurementRaw3D, SelfCalibrateType,
+    MAX_LOOPS,
 };
 use embedded_hal::{delay::DelayNs, i2c, spi};
 
@@ -31,16 +34,14 @@ where
 
     fn write_read(&mut self, address: u8, buffer: &mut [u8]) -> Result<(), Self::Error> {
         let mut dummy = [0u8; 2];
-        self.i2c
-            .transaction(
-                self.address,
-                &mut [
-                    i2c::Operation::Write(&[address]),
-                    i2c::Operation::Read(&mut dummy),
-                    i2c::Operation::Read(buffer),
-                ],
-            )
-            ?;
+        self.i2c.transaction(
+            self.address,
+            &mut [
+                i2c::Operation::Write(&[address]),
+                i2c::Operation::Read(&mut dummy),
+                i2c::Operation::Read(buffer),
+            ],
+        )?;
         #[cfg(feature = "defmt")]
         {
             trace!("I2C Read from {:#x}: {=[u8]:#x}", address, buffer);
@@ -65,13 +66,11 @@ where
 
     fn write_read(&mut self, address: u8, buffer: &mut [u8]) -> Result<(), Self::Error> {
         let mut dummy = [0u8; 1];
-        self.spi
-            .transaction(&mut [
-                spi::Operation::Write(&[address]),
-                spi::Operation::Read(&mut dummy),
-                spi::Operation::Read(buffer),
-            ])
-            ?;
+        self.spi.transaction(&mut [
+            spi::Operation::Write(&[address]),
+            spi::Operation::Read(&mut dummy),
+            spi::Operation::Read(buffer),
+        ])?;
         #[cfg(feature = "defmt")]
         {
             trace!("SPI Read from {:#x}: {=[u8]:#x}", address, buffer);
@@ -168,9 +167,7 @@ where
             gyro_config,
         ) = self.config.get_registers();
 
-        feature_engine_control
-            .write_register(&mut self.iface)
-            ?;
+        feature_engine_control.write_register(&mut self.iface)?;
         fifo_config.write_register(&mut self.iface)?;
         sensor_interrupt_map.write_register(&mut self.iface)?;
         i2c_watchdog_config.write_register(&mut self.iface)?;
@@ -327,8 +324,7 @@ where
             .with_sensitivity(what.sensitivity())
             .with_offset(what.offset())
             .with_apply(true)
-            .write_register(&mut self.iface)
-            ?;
+            .write_register(&mut self.iface)?;
         self.delay.delay_ms(50);
         let errors = ErrorReg::read_register(&mut self.iface)?;
         if errors.fatal() || errors.accel_conf() || errors.gyro_conf() {
@@ -378,7 +374,7 @@ where
             Ok(())
         }
     }
-    
+
     fn is_calibration_applied(&mut self) -> Result<bool, Bmi323Error<E>> {
         let gyro_self_calib = GyroSelfCalibSelect::read_register(&mut self.iface)?;
         Ok(gyro_self_calib.apply())

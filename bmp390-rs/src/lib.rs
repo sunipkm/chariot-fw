@@ -10,15 +10,15 @@ pub use crate::{
 #[cfg(feature = "async")]
 mod r#async;
 mod config;
+mod conversion;
 mod interface;
 mod registers;
-mod conversion;
 #[cfg(feature = "sync")]
 mod sync;
 
 pub use uom::si::f32::{Length, Pressure, ThermodynamicTemperature};
 pub use uom::si::length::{foot, meter};
-pub use uom::si::pressure::{hectopascal, pascal, millibar};
+pub use uom::si::pressure::{hectopascal, millibar, pascal};
 pub use uom::si::thermodynamic_temperature::degree_celsius;
 
 /// Default I2C address for the BMP390 sensor

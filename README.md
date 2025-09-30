@@ -47,5 +47,5 @@
 5. Detach from the target: <kbd>Ctrl</kbd> + <kbd>C</kbd>.
 6. Use `dump_flash` to dump the flash memory to a binary file:
     ```sh
-    ./dump_flash <Offset>
+    ./dump_flash <pre-flight log>
     ```

@@ -25,7 +25,7 @@ use {defmt_rtt as _, panic_probe as _};
 
 mod measurement;
 mod sensor_tasks;
-/// Ideally, we can write 
+/// Ideally, we can write
 /// TODO: Check this value
 pub const CADENCE: Duration = Duration::from_secs(2); // seconds
 bind_interrupts!(struct Irqs {
